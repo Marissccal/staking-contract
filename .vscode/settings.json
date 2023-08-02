@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.diagnostics.disabled": [
+        "[\"proc-macro-srv\"]",
+        "\"proc macro not expanded\"",
+        "no matching package named `multiversx-sc-macros` found"
+    ]
+}
