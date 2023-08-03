@@ -5,9 +5,9 @@
 ////////////////////////////////////////////////////
 
 // Init:                                 1
-// Endpoints:                            4
+// Endpoints:                            5
 // Async Callback (empty):               1
-// Total number of exported functions:   6
+// Total number of exported functions:   7
 
 #![no_std]
 #![feature(lang_items)]
@@ -20,9 +20,10 @@ multiversx_sc_wasm_adapter::endpoints! {
     (
         init => init
         stake => stake
+        unstake => unstake
+        claimRewards => claim_rewards
+        getStakedAddresses => staked_addresses
         getStakingPosition => staking_position
-        getTotalStakedAmount => total_staked_amount
-        getTotalRewardsAmount => total_rewards_amount
     )
 }
 

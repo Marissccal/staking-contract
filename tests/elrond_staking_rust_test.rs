@@ -3,9 +3,6 @@ use multiversx_sc_scenario::{
     managed_address, managed_biguint, rust_biguint, whitebox_legacy::*, DebugApi,
 };
 use staking_contract::*;
-//use multiversx_sc_scenario::whitebox_legacy::*;
-use multiversx_sc_scenario::whitebox_legacy::{BlockchainStateWrapper, ContractObjWrapper};
-
 
 const WASM_PATH: &'static str = "output/staking-contract.wasm";
 const USER_BALANCE: u64 = 1_000_000_000_000_000_000;
@@ -52,7 +49,6 @@ where
 #[test]
 fn stake_unstake_test() {
     let mut setup = ContractSetup::new(staking_contract::contract_obj);
-    let owner_addr = setup.owner_address.clone();
     let user_addr = setup.user_address.clone();
 
     setup
@@ -74,7 +70,11 @@ fn stake_unstake_test() {
 
                 assert_eq!(
                     sc.staking_position(&managed_address!(&user_addr)).get(),
-                    managed_biguint!(USER_BALANCE)
+                    StakingPosition {
+                        stake_amount: managed_biguint!(USER_BALANCE),
+                        last_action_block: 0,
+                        reward_balance: managed_biguint!(0),
+                    }
                 );
             },
         )
@@ -88,6 +88,16 @@ fn stake_unstake_test() {
         &rust_biguint!(USER_BALANCE),
     );
 
+    // Wait for some blocks to accrue rewards (you can increase the number of transactions for more blocks)
+    for _ in 0..10 {
+        setup
+            .b_mock
+            .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
+                // This empty transaction will simulate block mining without doing anything for the user
+            })
+            .assert_ok();
+    }
+
     // unstake partial
     setup
         .b_mock
@@ -100,7 +110,11 @@ fn stake_unstake_test() {
 
                 assert_eq!(
                     sc.staking_position(&managed_address!(&user_addr)).get(),
-                    managed_biguint!(USER_BALANCE / 2)
+                    StakingPosition {
+                        stake_amount: managed_biguint!(USER_BALANCE / 2),
+                        last_action_block: 10, // Adjust this to the actual block number after the wait
+                        reward_balance: managed_biguint!(0),
+                    }
                 );
             },
         )
@@ -114,6 +128,16 @@ fn stake_unstake_test() {
         &rust_biguint!(USER_BALANCE / 2),
     );
 
+    // Wait for some blocks to accrue rewards (you can increase the number of transactions for more blocks)
+    for _ in 0..10 {
+        setup
+            .b_mock
+            .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
+                // This empty transaction will simulate block mining without doing anything for the user
+            })
+            .assert_ok();
+    }
+
     // unstake full
     setup
         .b_mock
@@ -124,10 +148,9 @@ fn stake_unstake_test() {
             |sc| {
                 sc.unstake(OptionalValue::None);
 
-                assert_eq!(
-                    sc.staking_position(&managed_address!(&user_addr)).get(),
-                    managed_biguint!(0)
-                );
+                assert!(sc
+                    .staking_position(&managed_address!(&user_addr))
+                    .is_empty());
             },
         )
         .assert_ok();

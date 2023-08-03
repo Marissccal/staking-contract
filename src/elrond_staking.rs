@@ -1,5 +1,16 @@
 #![no_std]
+
 multiversx_sc::imports!();
+multiversx_sc::derive_imports!();
+
+pub const REWARDS_PER_SECOND: u64 = 300_000_000_000_000_000;
+
+#[derive(TypeAbi, TopEncode, TopDecode, PartialEq, Debug)]
+pub struct StakingPosition<M: ManagedTypeApi> {
+    pub stake_amount: BigUint<M>,
+    pub last_action_block: u64,
+    pub reward_balance: BigUint<M>,
+}
 
 #[multiversx_sc::contract]
 pub trait StakingContract {
@@ -8,53 +19,114 @@ pub trait StakingContract {
 
     #[payable("EGLD")]
     #[endpoint]
-    fn stake(&self, staking_amount: BigUint) {
-        require!(
-            staking_amount > BigUint::from(0u64),
-            "Must stake more than 0"
-        );
+    fn stake(&self) {
+        let payment_amount = self.call_value().egld_value().clone_value();
+        require!(payment_amount > 0, "Must pay more than 0");
 
         let caller = self.blockchain().get_caller();
-
-        // Transfer the staked tokens from the caller to the contract
-        self.send().direct_egld(&caller, &staking_amount);
-
-        // Calculate rewards based on global speed
-        let global_speed = BigUint::from(300_000_000_000_000u64);
-        let elapsed_time = self.blockchain().get_block_timestamp().clone();
-        let rewards = staking_amount.clone() * elapsed_time * global_speed;
-
-        // Update staking position with rewards
         let stake_mapper = self.staking_position(&caller);
-        stake_mapper.update(|current_amount| *current_amount += staking_amount.clone());
 
-        // Update total staked amount (N(t))
-        let total_staked = self.total_staked_amount();
-        total_staked.update(|current_total| *current_total += staking_amount.clone());
+        let new_user = self.staked_addresses().insert(caller.clone());
+        let mut staking_pos = if !new_user {
+            stake_mapper.get()
+        } else {
+            let current_block = self.blockchain().get_block_epoch();
+            StakingPosition {
+                stake_amount: BigUint::zero(),
+                last_action_block: current_block,
+                reward_balance: BigUint::zero(),
+            }
+        };
 
-        // Update total rewards (dR(t))
-        let total_rewards = self.total_rewards_amount();
-        total_rewards.update(|current_rewards| *current_rewards += rewards.clone());
+        self.claim_rewards_for_user(&caller, &mut staking_pos);
+        staking_pos.stake_amount += payment_amount;
 
-        // Calculate share price (dS(t))
-        let share_price = rewards / total_staked.get().clone();
-        stake_mapper.update(|current_shares| *current_shares += share_price);
+        stake_mapper.set(&staking_pos);
     }
 
-    // Other contract functions...
+    #[endpoint]
+    fn unstake(&self, opt_unstake_amount: OptionalValue<BigUint>) {
+        let caller = self.blockchain().get_caller();
+        self.require_user_staked(&caller);
 
-    // Helper function to get the staking position for a given address
+        let stake_mapper = self.staking_position(&caller);
+        let mut staking_pos = stake_mapper.get();
+
+        let unstake_amount = match opt_unstake_amount {
+            OptionalValue::Some(amt) => amt,
+            OptionalValue::None => staking_pos.stake_amount.clone(),
+        };
+        require!(
+            unstake_amount > 0 && unstake_amount <= staking_pos.stake_amount,
+            "Invalid unstake amount"
+        );
+
+        self.claim_rewards_for_user(&caller, &mut staking_pos);
+        staking_pos.stake_amount -= &unstake_amount;
+
+        if staking_pos.stake_amount > 0 {
+            stake_mapper.set(&staking_pos);
+        } else {
+            stake_mapper.clear();
+            self.staked_addresses().swap_remove(&caller);
+        }
+
+        self.send().direct_egld(&caller, &unstake_amount);
+    }
+
+    #[endpoint(claimRewards)]
+    fn claim_rewards(&self) {
+        let caller = self.blockchain().get_caller();
+        self.require_user_staked(&caller);
+
+        let stake_mapper = self.staking_position(&caller);
+        let mut staking_pos = stake_mapper.get();
+        self.claim_rewards_for_user(&caller, &mut staking_pos);
+
+        stake_mapper.set(&staking_pos);
+    }
+
+    fn require_user_staked(&self, user: &ManagedAddress) {
+        require!(self.staked_addresses().contains(user), "Must stake first");
+    }
+
+    fn claim_rewards_for_user(
+        &self,
+        user: &ManagedAddress,
+        staking_pos: &mut StakingPosition<Self::Api>,
+    ) {
+        self.update_rewards(staking_pos);
+
+        let reward_amount = staking_pos.reward_balance.clone();
+        staking_pos.reward_balance = BigUint::zero();
+
+        if reward_amount > BigUint::zero() {
+            self.send().direct_egld(user, &reward_amount);
+        }
+    }
+
+    fn update_rewards(&self, staking_pos: &mut StakingPosition<Self::Api>) {
+        let current_block = self.blockchain().get_block_nonce();
+        if current_block <= staking_pos.last_action_block {
+            return;
+        }
+
+        let blocks_passed = current_block - staking_pos.last_action_block;
+        let total_rewards = BigUint::from(REWARDS_PER_SECOND) * BigUint::from(blocks_passed);
+        let user_share = staking_pos.stake_amount.clone() * BigUint::from(blocks_passed);
+
+        staking_pos.reward_balance += user_share / total_rewards;
+        staking_pos.last_action_block = current_block;
+    } 
+    
+    #[view(getStakedAddresses)]
+    #[storage_mapper("stakedAddresses")]
+    fn staked_addresses(&self) -> UnorderedSetMapper<ManagedAddress>;
+
     #[view(getStakingPosition)]
     #[storage_mapper("stakingPosition")]
-    fn staking_position(&self, addr: &ManagedAddress) -> SingleValueMapper<BigUint>;
-
-    // Helper function to get the total staked amount
-    #[view(getTotalStakedAmount)]
-    #[storage_mapper("totalStakedAmount")]
-    fn total_staked_amount(&self) -> SingleValueMapper<BigUint>;
-
-    // Helper function to get the total rewards amount
-    #[view(getTotalRewardsAmount)]
-    #[storage_mapper("totalRewardsAmount")]
-    fn total_rewards_amount(&self) -> SingleValueMapper<BigUint>;
+    fn staking_position(
+        &self,
+        addr: &ManagedAddress,
+    ) -> SingleValueMapper<StakingPosition<Self::Api>>;    
 }
