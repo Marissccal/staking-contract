@@ -46,6 +46,8 @@ where
     }
 }
 
+use multiversx_sc::contract_base::ContractBase;
+
 #[test]
 fn stake_unstake_test() {
     let mut setup = ContractSetup::new(staking_contract::contract_obj);
@@ -87,13 +89,12 @@ fn stake_unstake_test() {
         setup.contract_wrapper.address_ref(),
         &rust_biguint!(USER_BALANCE),
     );
-
-    // Wait for some blocks to accrue rewards (you can increase the number of transactions for more blocks)
+    
     for _ in 0..10 {
         setup
             .b_mock
             .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
-                // This empty transaction will simulate block mining without doing anything for the user
+                sc.update_rewards(&mut sc.staking_position(&managed_address!(&user_addr)).get());
             })
             .assert_ok();
     }
@@ -112,7 +113,7 @@ fn stake_unstake_test() {
                     sc.staking_position(&managed_address!(&user_addr)).get(),
                     StakingPosition {
                         stake_amount: managed_biguint!(USER_BALANCE / 2),
-                        last_action_block: 10, // Adjust this to the actual block number after the wait
+                        last_action_block: 10, 
                         reward_balance: managed_biguint!(0),
                     }
                 );
@@ -127,13 +128,16 @@ fn stake_unstake_test() {
         setup.contract_wrapper.address_ref(),
         &rust_biguint!(USER_BALANCE / 2),
     );
-
-    // Wait for some blocks to accrue rewards (you can increase the number of transactions for more blocks)
+    
     for _ in 0..10 {
         setup
             .b_mock
             .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
-                // This empty transaction will simulate block mining without doing anything for the user
+                
+                sc.update_rewards(&mut sc.staking_position(&managed_address!(&user_addr)).get());
+                let mut staking_pos = sc.staking_position(&managed_address!(&user_addr)).get();
+            staking_pos.last_action_block += 1;
+            sc.staking_position(&managed_address!(&user_addr)).set(&staking_pos);
             })
             .assert_ok();
     }
@@ -162,3 +166,6 @@ fn stake_unstake_test() {
         .b_mock
         .check_egld_balance(setup.contract_wrapper.address_ref(), &rust_biguint!(0));
 }
+
+
+

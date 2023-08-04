@@ -110,14 +110,15 @@ pub trait StakingContract {
         if current_block <= staking_pos.last_action_block {
             return;
         }
-
+    
         let blocks_passed = current_block - staking_pos.last_action_block;
-        let total_rewards = BigUint::from(REWARDS_PER_SECOND) * BigUint::from(blocks_passed);
-        let user_share = staking_pos.stake_amount.clone() * BigUint::from(blocks_passed);
-
+        let blocks_passed_biguint = BigUint::from(blocks_passed); // Convert blocks_passed to BigUint
+        let total_rewards = BigUint::from(REWARDS_PER_SECOND) * blocks_passed_biguint.clone(); // Clone blocks_passed_biguint before using it
+        let user_share = staking_pos.stake_amount.clone() * blocks_passed_biguint; // Use blocks_passed_biguint in the calculation
+    
         staking_pos.reward_balance += user_share / total_rewards;
         staking_pos.last_action_block = current_block;
-    } 
+    }         
     
     #[view(getStakedAddresses)]
     #[storage_mapper("stakedAddresses")]
