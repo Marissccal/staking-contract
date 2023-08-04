@@ -74,17 +74,20 @@ pub trait StakingContract {
         self.send().direct_egld(&caller, &unstake_amount);
     }
 
-    #[endpoint(claimRewards)]
-    fn claim_rewards(&self) {
-        let caller = self.blockchain().get_caller();
-        self.require_user_staked(&caller);
+    #[endpoint(claim_rewards)]
+fn claim_rewards(&self) {
+    let caller = self.blockchain().get_caller();
+    self.require_user_staked(&caller);
 
-        let stake_mapper = self.staking_position(&caller);
-        let mut staking_pos = stake_mapper.get();
-        self.claim_rewards_for_user(&caller, &mut staking_pos);
+    let stake_mapper = self.staking_position(&caller);
+    let mut staking_pos = stake_mapper.get();
 
-        stake_mapper.set(&staking_pos);
-    }
+    let current_block = self.blockchain().get_block_nonce();
+    self.update_rewards(&mut staking_pos, current_block);
+
+    stake_mapper.set(&staking_pos);
+}
+
 
     fn require_user_staked(&self, user: &ManagedAddress) {
         require!(self.staked_addresses().contains(user), "Must stake first");
@@ -95,7 +98,7 @@ pub trait StakingContract {
         user: &ManagedAddress,
         staking_pos: &mut StakingPosition<Self::Api>,
     ) {
-        self.update_rewards(staking_pos);
+        self.update_rewards(staking_pos, self.blockchain().get_block_nonce());
 
         let reward_amount = staking_pos.reward_balance.clone();
         staking_pos.reward_balance = BigUint::zero();
@@ -105,20 +108,29 @@ pub trait StakingContract {
         }
     }
 
-    fn update_rewards(&self, staking_pos: &mut StakingPosition<Self::Api>) {
-        let current_block = self.blockchain().get_block_nonce();
+    fn update_rewards(&self, staking_pos: &mut StakingPosition<Self::Api>, current_block: u64) {
         if current_block <= staking_pos.last_action_block {
             return;
         }
     
         let blocks_passed = current_block - staking_pos.last_action_block;
-        let blocks_passed_biguint = BigUint::from(blocks_passed); // Convert blocks_passed to BigUint
-        let total_rewards = BigUint::from(REWARDS_PER_SECOND) * blocks_passed_biguint.clone(); // Clone blocks_passed_biguint before using it
-        let user_share = staking_pos.stake_amount.clone() * blocks_passed_biguint; // Use blocks_passed_biguint in the calculation
+        let blocks_passed_biguint = BigUint::from(blocks_passed);
     
+        // Calculate the total rewards for the given blocks_passed
+        let total_rewards = BigUint::from(REWARDS_PER_SECOND) * blocks_passed_biguint.clone();
+    
+        // Calculate the user's share of rewards based on their stake
+        let user_share = staking_pos.stake_amount.clone() * blocks_passed_biguint;
+    
+        // Calculate the reward balance as a fraction
         staking_pos.reward_balance += user_share / total_rewards;
+    
+        // Update the last action block after rewards have been calculated
         staking_pos.last_action_block = current_block;
-    }         
+    }
+    
+    
+     
     
     #[view(getStakedAddresses)]
     #[storage_mapper("stakedAddresses")]

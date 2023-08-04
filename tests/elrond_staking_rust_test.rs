@@ -89,58 +89,6 @@ fn stake_unstake_test() {
         setup.contract_wrapper.address_ref(),
         &rust_biguint!(USER_BALANCE),
     );
-    
-    for _ in 0..10 {
-        setup
-            .b_mock
-            .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
-                sc.update_rewards(&mut sc.staking_position(&managed_address!(&user_addr)).get());
-            })
-            .assert_ok();
-    }
-
-    // unstake partial
-    setup
-        .b_mock
-        .execute_tx(
-            &user_addr,
-            &setup.contract_wrapper,
-            &rust_biguint!(0),
-            |sc| {
-                sc.unstake(OptionalValue::Some(managed_biguint!(USER_BALANCE / 2)));
-
-                assert_eq!(
-                    sc.staking_position(&managed_address!(&user_addr)).get(),
-                    StakingPosition {
-                        stake_amount: managed_biguint!(USER_BALANCE / 2),
-                        last_action_block: 10, 
-                        reward_balance: managed_biguint!(0),
-                    }
-                );
-            },
-        )
-        .assert_ok();
-
-    setup
-        .b_mock
-        .check_egld_balance(&user_addr, &rust_biguint!(USER_BALANCE / 2));
-    setup.b_mock.check_egld_balance(
-        setup.contract_wrapper.address_ref(),
-        &rust_biguint!(USER_BALANCE / 2),
-    );
-    
-    for _ in 0..10 {
-        setup
-            .b_mock
-            .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
-                
-                sc.update_rewards(&mut sc.staking_position(&managed_address!(&user_addr)).get());
-                let mut staking_pos = sc.staking_position(&managed_address!(&user_addr)).get();
-            staking_pos.last_action_block += 1;
-            sc.staking_position(&managed_address!(&user_addr)).set(&staking_pos);
-            })
-            .assert_ok();
-    }
 
     // unstake full
     setup
@@ -165,6 +113,88 @@ fn stake_unstake_test() {
     setup
         .b_mock
         .check_egld_balance(setup.contract_wrapper.address_ref(), &rust_biguint!(0));
+}
+
+#[test]
+fn stake_claim_rewards_test() {
+    let mut setup = ContractSetup::new(staking_contract::contract_obj);
+    let user_addr = setup.user_address.clone();
+
+    setup
+        .b_mock
+        .check_egld_balance(&user_addr, &rust_biguint!(USER_BALANCE));
+    setup
+        .b_mock
+        .check_egld_balance(setup.contract_wrapper.address_ref(), &rust_biguint!(0));
+
+    // stake full
+    setup
+        .b_mock
+        .execute_tx(
+            &user_addr,
+            &setup.contract_wrapper,
+            &rust_biguint!(USER_BALANCE),
+            |sc| {
+                sc.stake();
+
+                assert_eq!(
+                    sc.staking_position(&managed_address!(&user_addr)).get(),
+                    StakingPosition {
+                        stake_amount: managed_biguint!(USER_BALANCE),
+                        last_action_block: 0,
+                        reward_balance: managed_biguint!(0),
+                    }
+                );
+            },
+        )
+        .assert_ok();
+
+    setup
+        .b_mock
+        .check_egld_balance(&user_addr, &rust_biguint!(0));
+    setup
+        .b_mock
+        .check_egld_balance(setup.contract_wrapper.address_ref(), &rust_biguint!(USER_BALANCE));
+
+    // wait for some time, for example, 10 blocks
+    let blocks_passed = 10;
+    setup.b_mock.set_block_nonce(blocks_passed);
+
+    // claim rewards
+    setup
+        .b_mock
+        .execute_tx(&user_addr, &setup.contract_wrapper, &rust_biguint!(0), |sc| {
+            sc.claim_rewards();
+
+            // Calculate expected rewards based on REWARDS_PER_SECOND and blocks_passed
+            let expected_rewards = managed_biguint!(REWARDS_PER_SECOND) * blocks_passed;
+
+            let actual_position = sc.staking_position(&managed_address!(&user_addr)).get();
+            println!("Actual Position: {:?}", actual_position);
+            println!("Expected Position: {:?}", StakingPosition {
+                stake_amount: managed_biguint!(USER_BALANCE),
+                last_action_block: blocks_passed,
+                reward_balance: expected_rewards.clone(),
+            });
+
+            assert_eq!(
+                actual_position,
+                StakingPosition {
+                    stake_amount: managed_biguint!(USER_BALANCE),
+                    last_action_block: blocks_passed,
+                    reward_balance: expected_rewards,
+                }
+            );
+        })
+        .assert_ok();
+
+    setup
+        .b_mock
+        .check_egld_balance(&user_addr, &rust_biguint!(0));
+    setup.b_mock.check_egld_balance(
+        setup.contract_wrapper.address_ref(),
+        &rust_biguint!(USER_BALANCE),
+    );
 }
 
 

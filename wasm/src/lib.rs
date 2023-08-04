@@ -21,7 +21,7 @@ multiversx_sc_wasm_adapter::endpoints! {
         init => init
         stake => stake
         unstake => unstake
-        claimRewards => claim_rewards
+        claim_rewards => claim_rewards
         getStakedAddresses => staked_addresses
         getStakingPosition => staking_position
     )
