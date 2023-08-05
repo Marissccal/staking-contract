@@ -2,6 +2,7 @@
 
 multiversx_sc::imports!();
 multiversx_sc::derive_imports!();
+use multiversx_sc::types::BigUint;
 
 pub const REWARDS_PER_SECOND: u64 = 300_000_000_000_000_000;
 
@@ -75,18 +76,18 @@ pub trait StakingContract {
     }
 
     #[endpoint(claim_rewards)]
-fn claim_rewards(&self) {
-    let caller = self.blockchain().get_caller();
-    self.require_user_staked(&caller);
+    fn claim_rewards(&self) {
+        let caller = self.blockchain().get_caller();
+        self.require_user_staked(&caller);
 
-    let stake_mapper = self.staking_position(&caller);
-    let mut staking_pos = stake_mapper.get();
+        let stake_mapper = self.staking_position(&caller);
+        let mut staking_pos = stake_mapper.get();
 
-    let current_block = self.blockchain().get_block_nonce();
-    self.update_rewards(&mut staking_pos, current_block);
+        let current_block = self.blockchain().get_block_nonce();
+        self.update_rewards(&mut staking_pos, current_block);
 
-    stake_mapper.set(&staking_pos);
-}
+        stake_mapper.set(&staking_pos);
+    }
 
 
     fn require_user_staked(&self, user: &ManagedAddress) {
@@ -128,9 +129,7 @@ fn claim_rewards(&self) {
         // Update the last action block after rewards have been calculated
         staking_pos.last_action_block = current_block;
     }
-    
-    
-     
+       
     
     #[view(getStakedAddresses)]
     #[storage_mapper("stakedAddresses")]
