@@ -209,7 +209,12 @@ fn rewards_test() {
                 );
             },
         )
-        .assert_ok();   
+        .assert_ok();  
+
+    setup.b_mock.check_egld_balance(
+        &user_addr,
+        &rust_biguint!(REWARDS_PER_BLOCK * BLOCKS_PASSED),
+    ); 
 
     // query rewards after claim
     setup

@@ -138,8 +138,7 @@ pub trait StakingContract {
 
     #[view(getContractBalance)]
     fn get_contract_balance(&self) -> BigUint {
-        let contract_address: ManagedAddress<Self::Api> = self.blockchain().get_caller();
-        let contract_balance = self.blockchain().get_balance(&contract_address);
+        let contract_balance = self.blockchain().get_sc_balance(&EgldOrEsdtTokenIdentifier::egld(), 0);
         BigUint::from(contract_balance)
     }    
 
@@ -159,11 +158,6 @@ pub trait StakingContract {
 
         staking_pos.stake_amount.clone()
     }   
-
-    #[view(getTotalRewardsGenerated)]
-    fn get_total_rewards_generated(&self) -> BigUint {
-        self.total_rewards().get()
-    }
 
     #[view(getUpdatedTotalRewards)]
     fn get_updated_total_rewards(&self) -> BigUint {
