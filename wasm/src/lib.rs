@@ -5,9 +5,9 @@
 ////////////////////////////////////////////////////
 
 // Init:                                 1
-// Endpoints:                           12
+// Endpoints:                           11
 // Async Callback (empty):               1
-// Total number of exported functions:  14
+// Total number of exported functions:  13
 
 #![no_std]
 #![feature(lang_items)]
@@ -27,7 +27,6 @@ multiversx_sc_wasm_adapter::endpoints! {
         contractCreationBlock => contract_creation_block
         contractCreationTimestamp => contract_creation_timestamp
         getStakeAmount => get_stake_amount
-        getTotalRewardsGenerated => get_total_rewards_generated
         getUpdatedTotalRewards => get_updated_total_rewards
         getStakedAddresses => staked_addresses
         getStakingPosition => staking_position
